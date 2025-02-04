@@ -24,6 +24,7 @@ const Map = ({ route }: MapProps) => {
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
+    // Clean up function
     return () => {
       map.current?.remove();
     };
@@ -34,51 +35,80 @@ const Map = ({ route }: MapProps) => {
 
     const coordinates = route;
 
-    const bounds = coordinates.reduce((bounds, coord) => {
-      return bounds.extend(coord as [number, number]);
-    }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+    // Function to add route to map
+    const addRoute = () => {
+      if (!map.current) return;
 
-    map.current.fitBounds(bounds, {
-      padding: 50,
-      duration: 1000
-    });
+      const bounds = coordinates.reduce((bounds, coord) => {
+        return bounds.extend(coord as [number, number]);
+      }, new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
 
-    if (map.current.getSource('route')) {
-      (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData({
-        type: 'Feature',
-        properties: {},
-        geometry: {
-          type: 'LineString',
-          coordinates
-        }
+      map.current.fitBounds(bounds, {
+        padding: 50,
+        duration: 1000
       });
-    } else {
-      map.current.addSource('route', {
-        type: 'geojson',
-        data: {
+
+      // Check if the source already exists
+      if (map.current.getSource('route')) {
+        (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData({
           type: 'Feature',
           properties: {},
           geometry: {
             type: 'LineString',
             coordinates
           }
+        });
+      } else {
+        // Wait for the style to be loaded before adding source and layer
+        if (!map.current.isStyleLoaded()) {
+          map.current.once('style.load', addRoute);
+          return;
         }
-      });
 
-      map.current.addLayer({
-        id: 'route',
-        type: 'line',
-        source: 'route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#10b981',
-          'line-width': 4
-        }
-      });
+        map.current.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates
+            }
+          }
+        });
+
+        map.current.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#10b981',
+            'line-width': 4
+          }
+        });
+      }
+    };
+
+    // Add route when the style is loaded
+    if (map.current.isStyleLoaded()) {
+      addRoute();
+    } else {
+      map.current.once('style.load', addRoute);
     }
+
+    // Cleanup
+    return () => {
+      if (map.current?.getLayer('route')) {
+        map.current.removeLayer('route');
+      }
+      if (map.current?.getSource('route')) {
+        map.current.removeSource('route');
+      }
+    };
   }, [route]);
 
   return (
